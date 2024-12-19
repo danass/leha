@@ -6,20 +6,22 @@ Le script `main.py` est conçu pour automatiser le processus de téléchargement
 
 ### Fonctionnalités principales
 
-1. **Création des tables dans la base de données** 🛠️
+1. **Récupération des liens de téléchargement** 🌐
+   - La fonction `fetch_and_process_links` interroge l'API de France Compétences pour obtenir les liens de téléchargement des fichiers CSV les plus récents et les traite.
+
+
+2. **Création des tables dans la base de données** 🛠️
    - La fonction `create_tables` crée les tables nécessaires dans la base de données PostgreSQL si elles n'existent pas déjà.
 
-2. **Téléchargement et extraction des fichiers CSV** 📥
+3. **Téléchargement et extraction des fichiers CSV** 📥
    - La fonction `download_and_unzip` télécharge les fichiers ZIP depuis une URL donnée, les extrait et traite les fichiers CSV pertinents.
 
-3. **Traitement des fichiers CSV** 📄
+4. **Traitement des fichiers CSV** 📄
    - La fonction `process_csv` lit les fichiers CSV et appelle les fonctions de synchronisation appropriées (`sync_fiches`, `sync_certificateurs`, `sync_partenaires`, `sync_bloc_competences`) pour mettre à jour les tables de la base de données.
 
-4. **Synchronisation des données** 🔄
+5. **Synchronisation des données** 🔄
    - Chaque fonction de synchronisation (`sync_fiches`, `sync_certificateurs`, `sync_partenaires`, `sync_bloc_competences`) compare les données des fichiers CSV avec celles de la base de données et effectue les insertions, mises à jour et suppressions nécessaires pour maintenir la base de données à jour.
 
-5. **Récupération des liens de téléchargement** 🌐
-   - La fonction `fetch_and_process_links` interroge l'API de France Compétences pour obtenir les liens de téléchargement des fichiers CSV les plus récents et les traite.
 
 ### Comment utiliser le script
 
@@ -50,4 +52,4 @@ pip install pandas psycopg2-binary python-dotenv requests
 
 ### Auteur
 
-Ce script a été développé par [Votre Nom] pour automatiser la gestion des données de France Compétences. 📈
+Ce script a été développé par Daniel Assayag pour automatiser la gestion des données de France Compétences. 📈

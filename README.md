@@ -36,6 +36,17 @@ Le script `main.py` est conçu pour automatiser le processus de téléchargement
    python main.py
    ```
 
+#### Utilisation avec Docker
+
+1. Construisez l'image Docker :
+   ```bash
+   docker build -t leha .
+   ```
+2. Exécutez le conteneur Docker :
+   ```bash
+   docker run -d --network host --restart unless-stopped leha
+   ```
+
 Le script téléchargera les données les plus récentes, les traitera et mettra à jour votre base de données automatiquement. 🚀
 
 ### Prérequis

@@ -1,4 +1,4 @@
-# Projet Leha 📊
+# Projet LEHA 📊
 
 ## Description
 

@@ -1,0 +1,2 @@
+# Run the script at 6 AM and 6 PM every day
+0 6,18 * * * /usr/local/bin/python /usr/src/app/main.py >> /var/log/cron.log 2>&1

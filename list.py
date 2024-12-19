@@ -10,7 +10,7 @@ def get_table_counts():
         dbname="francecompetences",
         user=os.getenv("DB_USER"),
         password=os.getenv("DB_PASSWORD"),
-        host="localhost",
+        host=os.getenv("HOST"),
         port="5432"
     )
     cur = conn.cursor()
@@ -29,7 +29,7 @@ def empty_tables():
         dbname="francecompetences",
         user=os.getenv("DB_USER"),
         password=os.getenv("DB_PASSWORD"),
-        host="localhost",
+        host=os.getenv("HOST"),
         port="5432"
     )
     cur = conn.cursor()

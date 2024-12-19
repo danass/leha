@@ -2,7 +2,6 @@ import os
 import pandas as pd
 import psycopg2
 from dotenv import load_dotenv
-import re
 from datetime import datetime
 import requests
 from io import BytesIO
@@ -17,7 +16,7 @@ def create_tables():
         dbname="francecompetences",
         user=os.getenv("DB_USER"),
         password=os.getenv("DB_PASSWORD"),
-        host="localhost",
+        host=os.getenv("HOST"),
         port="5432"
     )
     cur = conn.cursor()
@@ -123,7 +122,7 @@ def sync_fiches(df):
         dbname="francecompetences",
         user=os.getenv("DB_USER"),
         password=os.getenv("DB_PASSWORD"),
-        host="localhost",
+        host=os.getenv("HOST"),
         port="5432"
     )
     cur = conn.cursor()
@@ -245,7 +244,7 @@ def sync_certificateurs(df):
         dbname="francecompetences",
         user=os.getenv("DB_USER"),
         password=os.getenv("DB_PASSWORD"),
-        host="localhost",
+        host=os.getenv("HOST"),
         port="5432"
     )
     cur = conn.cursor()
@@ -314,7 +313,7 @@ def sync_partenaires(df):
         dbname="francecompetences",
         user=os.getenv("DB_USER"),
         password=os.getenv("DB_PASSWORD"),
-        host="localhost",
+        host=os.getenv("HOST"),
         port="5432"
     )
     cur = conn.cursor()
@@ -388,7 +387,7 @@ def sync_bloc_competences(df):
         dbname="francecompetences",
         user=os.getenv("DB_USER"),
         password=os.getenv("DB_PASSWORD"),
-        host="localhost",
+        host=os.getenv("HOST"),
         port="5432"
     )
     cur = conn.cursor()

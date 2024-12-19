@@ -15,7 +15,7 @@ def get_table_counts():
     )
     cur = conn.cursor()
     
-    tables = ["rs", "rncp", "fiches", "certificateurs", "partenaires"]
+    tables = ["rs", "rncp", "fiches", "certificateurs", "partenaires", "bloc_competences"]
     for table in tables:
         cur.execute(f"SELECT COUNT(*) FROM {table}")
         count = cur.fetchone()[0]

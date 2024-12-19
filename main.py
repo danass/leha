@@ -92,7 +92,7 @@ def create_tables():
     print("Index on Numero_Fiche created.")
 
     # Create Bloc_Competences table if it does not exist
-    print("Creating Bloc_Competences table...")
+    print("Creating Blocs_de_Competences table...")
     cur.execute("""
         CREATE TABLE IF NOT EXISTS Bloc_Competences (
             id SERIAL PRIMARY KEY,
@@ -470,7 +470,7 @@ def download_and_unzip(url, title):
     if response.status_code == 200:
         with zipfile.ZipFile(BytesIO(response.content)) as z:
             for file_info in z.infolist():
-                if "Standard" in file_info.filename or "Certificateurs" in file_info.filename or "Partenaires" in file_info.filename or "Bloc_Competences" in file_info.filename:
+                if "Standard" in file_info.filename or "Certificateurs" in file_info.filename or "Partenaires" in file_info.filename or "Blocs" in file_info.filename:
                     file_info.filename = f"{os.path.splitext(title)[0]}_{file_info.filename}"
                     z.extract(file_info, "downloads")
                     print(f"Extracted: {file_info.filename}")

@@ -468,12 +468,20 @@ def download_and_unzip(url, title):
     response = requests.get(url)
     if response.status_code == 200:
         with zipfile.ZipFile(BytesIO(response.content)) as z:
+            # Extract all files first
+            files_to_process = []
             for file_info in z.infolist():
                 if "Standard" in file_info.filename or "Certificateurs" in file_info.filename or "Partenaires" in file_info.filename or "Blocs" in file_info.filename:
                     file_info.filename = f"{os.path.splitext(title)[0]}_{file_info.filename}"
                     z.extract(file_info, "downloads")
                     print(f"Extracted: {file_info.filename}")
-                    process_csv(os.path.join("downloads", file_info.filename))
+                    files_to_process.append(file_info.filename)
+            
+            # Process files in correct order: Standard first, then others
+            files_to_process.sort(key=lambda x: (0 if "Standard" in x else 1, x))
+            for filename in files_to_process:
+                print(f"Processing: {filename}")
+                process_csv(os.path.join("downloads", filename))
         print(f"Downloaded and unzipped: {title}")
     else:
         print(f"Failed to download {title}: {response.status_code}")

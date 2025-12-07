@@ -19,13 +19,32 @@ def get_db_connection():
     if db_url:
         # Parse DATABASE_URL (format: postgresql://user:password@host:port/database)
         parsed = urlparse(db_url)
-        return psycopg2.connect(
-            host=parsed.hostname,
-            port=parsed.port or 5432,
-            user=parsed.username,
-            password=parsed.password,
-            database=parsed.path.lstrip('/').split('?')[0]  # Remove query params
-        )
+        
+        # Extract SSL mode from query params
+        ssl_mode = 'require'
+        if parsed.query:
+            params = dict(param.split('=') for param in parsed.query.split('&') if '=' in param)
+            ssl_mode = params.get('sslmode', 'require')
+        
+        # Build connection params
+        conn_params = {
+            'host': parsed.hostname,
+            'port': parsed.port or 5432,
+            'user': parsed.username,
+            'password': parsed.password,
+            'database': parsed.path.lstrip('/').split('?')[0]  # Remove query params
+        }
+        
+        # Add SSL configuration for Prisma Postgres (db.prisma.io)
+        if 'db.prisma.io' in parsed.hostname or ssl_mode == 'require':
+            conn_params['sslmode'] = 'require'
+            # Don't verify certificate for Prisma Postgres
+            import ssl
+            conn_params['sslcert'] = None
+            conn_params['sslkey'] = None
+            conn_params['sslrootcert'] = None
+        
+        return psycopg2.connect(**conn_params)
     
     # Fallback to old method
     return psycopg2.connect(

@@ -1,15 +1,16 @@
 # leha — synchro RNCP (France Compétences)
 
 Synchronise le **Répertoire National des Certifications Professionnelles (RNCP)**
-depuis l'open data de France Compétences vers une base PostgreSQL.
-Alimente le moteur de recherche RNCP de [diplome.app/rncp](https://www.diplome.app/rncp).
+et le **Répertoire Spécifique (RS)** depuis l'open data de France Compétences vers
+une base PostgreSQL.
+Alimente le moteur de recherche de [diplome.app/rncp](https://www.diplome.app/rncp).
 
 ## Ce que fait le script
 
 `sync_lowercase.py` :
 
-1. télécharge le dernier export **XML RNCP (v4-1)** publié sur data.gouv.fr ;
-2. le parse et remplit quatre tables PostgreSQL :
+1. télécharge les derniers exports **XML RNCP et RS (v4-1)** publiés sur data.gouv.fr ;
+2. les parse et remplit quatre tables PostgreSQL (le RS n'a ni niveau européen ni blocs de compétences) :
    - `fiches` — les titres (intitulé, niveau, dates, statut actif/échu…)
    - `certificateurs` — les organismes certificateurs
    - `partenaires` — les organismes habilités à préparer/délivrer

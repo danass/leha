@@ -62,12 +62,18 @@ def fr_date(v):
     return v
 
 
-def download_latest_export():
-    print("🔎 Recherche du dernier export sur data.gouv...")
+# Les deux répertoires publiés par France Compétences dans le même jeu de données :
+#  - RNCP : titres à finalité professionnelle (avec niveau européen, blocs de compétences)
+#  - RS   : Répertoire Spécifique (habilitations, certifications type TOSA…), sans niveau
+EXPORTS = ("export-fiches-rncp-v4-1", "export-fiches-rs-v4-1")
+
+
+def download_latest_export(prefix="export-fiches-rncp-v4-1"):
+    print(f"🔎 Recherche du dernier export « {prefix} » sur data.gouv...")
     data = requests.get(DATASET_API, timeout=60).json().get("data", [])
-    candidates = [r for r in data if "export-fiches-rncp-v4-1" in (r.get("title") or "")]
+    candidates = [r for r in data if prefix in (r.get("title") or "")]
     if not candidates:
-        sys.exit("Aucun export v4-1 trouvé sur data.gouv")
+        sys.exit(f"Aucun export {prefix} trouvé sur data.gouv")
     latest = sorted(candidates, key=lambda r: r["title"])[-1]
     print(f"📥 Téléchargement : {latest['title']}")
     resp = requests.get(latest["url"], timeout=600)
@@ -262,7 +268,10 @@ def write_sync_status(conn, totals, duration_seconds):
 
 def main():
     start = time.time()
-    xml_path = sys.argv[1] if len(sys.argv) > 1 else download_latest_export()
+    # Un argument explicite = un ou plusieurs XML locaux ; sinon on télécharge
+    # les derniers exports RNCP puis RS. Les deux alimentent les mêmes tables
+    # (tables *_new remplies avant UNE seule bascule atomique en fin de run).
+    xml_paths = sys.argv[1:] if len(sys.argv) > 1 else [download_latest_export(p) for p in EXPORTS]
 
     conn = connect()
     ensure_detail_columns(conn)
@@ -272,23 +281,24 @@ def main():
     totals = {"fiches": 0, "certificateurs": 0, "partenaires": 0, "blocs": 0}
 
     print("🔄 Parsing + insertion...")
-    for _, el in ET.iterparse(xml_path, events=("end",)):
-        if el.tag != "FICHE":
-            continue
-        parsed = parse_fiche(el)
-        el.clear()
-        if not parsed:
-            continue
-        f, c, p, b = parsed
-        fiches.append(f); certifs.extend(c); parts.extend(p); blocs.extend(b)
-        totals["fiches"] += 1
-        totals["certificateurs"] += len(c)
-        totals["partenaires"] += len(p)
-        totals["blocs"] += len(b)
-        if len(fiches) >= BATCH:
-            conn = flush(conn, fiches, certifs, parts, blocs)
-            fiches, certifs, parts, blocs = [], [], [], []
-            print(f"\r⬆️  {totals['fiches']} fiches | {totals['partenaires']} partenaires", end="", flush=True)
+    for xml_path in xml_paths:
+        for _, el in ET.iterparse(xml_path, events=("end",)):
+            if el.tag != "FICHE":
+                continue
+            parsed = parse_fiche(el)
+            el.clear()
+            if not parsed:
+                continue
+            f, c, p, b = parsed
+            fiches.append(f); certifs.extend(c); parts.extend(p); blocs.extend(b)
+            totals["fiches"] += 1
+            totals["certificateurs"] += len(c)
+            totals["partenaires"] += len(p)
+            totals["blocs"] += len(b)
+            if len(fiches) >= BATCH:
+                conn = flush(conn, fiches, certifs, parts, blocs)
+                fiches, certifs, parts, blocs = [], [], [], []
+                print(f"\r⬆️  {totals['fiches']} fiches | {totals['partenaires']} partenaires", end="", flush=True)
     conn = flush(conn, fiches, certifs, parts, blocs)
 
     print("\n🔁 Bascule atomique des tables...")

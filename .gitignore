@@ -1,3 +1,17 @@
 /downloads
-.env
 /archive
+
+# secrets & environnement — ne jamais versionner
+.env
+.env.*
+
+# logs et sauvegardes locales
+*.log
+*.bak
+*.bak.*
+*.bak2.*
+
+# artefacts Python / OS
+__pycache__/
+venv/
+.DS_Store

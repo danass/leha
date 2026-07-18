@@ -1,66 +1,65 @@
-# Projet LEHA 📊
+# leha — synchro RNCP (France Compétences)
 
-## Description
+Synchronise le **Répertoire National des Certifications Professionnelles (RNCP)**
+depuis l'open data de France Compétences vers une base PostgreSQL.
+Alimente le moteur de recherche RNCP de [diplome.app/rncp](https://www.diplome.app/rncp).
 
-Le script `main.py` est conçu pour automatiser le processus de téléchargement, de traitement et de synchronisation des données provenant de l'API de France Compétences. Voici un aperçu de ce que fait chaque partie du script :
+## Ce que fait le script
 
-### Fonctionnalités principales
+`sync_lowercase.py` :
 
-1. **Récupération des liens de téléchargement** 🌐
-   - La fonction `fetch_and_process_links` interroge l'API de France Compétences pour obtenir les liens de téléchargement des fichiers CSV les plus récents et les traite.
+1. télécharge le dernier export **XML RNCP (v4-1)** publié sur data.gouv.fr ;
+2. le parse et remplit quatre tables PostgreSQL :
+   - `fiches` — les titres (intitulé, niveau, dates, statut actif/échu…)
+   - `certificateurs` — les organismes certificateurs
+   - `partenaires` — les organismes habilités à préparer/délivrer
+   - `bloc_competences` — les blocs de compétences
+3. reconstruit ces tables puis **bascule dessus de façon atomique** (aucune
+   coupure de service pendant la synchro) ;
+4. enregistre un statut horodaté dans `rncp_sync_status` (date + volumes), utilisé
+   pour afficher la fraîcheur des données sur diplome.app.
 
-
-2. **Création des tables dans la base de données** 🛠️
-   - La fonction `create_tables` crée les tables nécessaires dans la base de données PostgreSQL si elles n'existent pas déjà.
-
-3. **Téléchargement et extraction des fichiers CSV** 📥
-   - La fonction `download_and_unzip` télécharge les fichiers ZIP depuis une URL donnée, les extrait et traite les fichiers CSV pertinents.
-
-4. **Traitement des fichiers CSV** 📄
-   - La fonction `process_csv` lit les fichiers CSV et appelle les fonctions de synchronisation appropriées (`sync_fiches`, `sync_certificateurs`, `sync_partenaires`, `sync_bloc_competences`) pour mettre à jour les tables de la base de données.
-
-5. **Synchronisation des données** 🔄
-   - Chaque fonction de synchronisation (`sync_fiches`, `sync_certificateurs`, `sync_partenaires`, `sync_bloc_competences`) compare les données des fichiers CSV avec celles de la base de données et effectue les insertions, mises à jour et suppressions nécessaires pour maintenir la base de données à jour.
-
-
-### Comment utiliser le script
-
-1. Assurez-vous d'avoir une base de données PostgreSQL configurée et accessible.
-2. Créez un fichier `.env` dans le même répertoire que `main.py` avec les variables suivantes :
-   ```
-   DB_USER=your_db_user
-   DB_PASSWORD=your_db_password
-   ```
-3. Exécutez le script `main.py` :
-   ```bash
-   python main.py
-   ```
-
-#### Utilisation avec Docker
-
-1. Construisez l'image Docker :
-   ```bash
-   docker build -t leha .
-   ```
-2. Exécutez le conteneur Docker :
-   ```bash
-   docker run -d --network host --restart unless-stopped leha
-   ```
-
-Le script téléchargera les données les plus récentes, les traitera et mettra à jour votre base de données automatiquement. 🚀
-
-### Prérequis
-
-- Python 3.x
-- PostgreSQL
-- Bibliothèques Python : `pandas`, `psycopg2`, `dotenv`, `requests`
-
-### Installation des dépendances
+## Installation
 
 ```bash
-pip install pandas psycopg2-binary python-dotenv requests
+python3 -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
 ```
 
-### Auteur
+Créez un fichier `.env` avec la connexion PostgreSQL :
 
-Ce script a été développé par Daniel Assayag pour automatiser la gestion des données de France Compétences. 📈
+```
+DATABASE_URL_FRANCECOMPETENCES=postgres://user:password@host:port/base
+```
+
+## Lancement
+
+```bash
+python3 sync_lowercase.py              # télécharge le dernier export et synchronise
+python3 sync_lowercase.py export.xml   # utilise un export XML local
+```
+
+### En cron (2×/jour)
+
+`sync-cron.sh` lance la synchro et journalise l'horodatage + le code de sortie
+dans `sync-cron.log` :
+
+```cron
+0 6,18 * * * /chemin/vers/leha/sync-cron.sh
+```
+
+## Source & licence
+
+Données : [Répertoire national des certifications professionnelles](https://www.data.gouv.fr/fr/datasets/5eebbc067a14b6fecc9c9976/),
+publié par France Compétences sur data.gouv.fr, sous
+[Licence Ouverte / Etalab 2.0](https://www.etalab.gouv.fr/licence-ouverte-open-licence/).
+
+## Prérequis
+
+- Python 3.9+
+- PostgreSQL
+
+---
+
+> `main.py` (version historique : import CSV vers des tables PascalCase) est
+> conservé pour référence mais n'est plus utilisé — `sync_lowercase.py` le remplace.

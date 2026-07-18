@@ -24,7 +24,7 @@ import xml.etree.ElementTree as ET
 
 import requests
 import psycopg2
-from psycopg2.extras import execute_values
+from psycopg2.extras import execute_values, Json
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -87,14 +87,26 @@ def download_latest_export(prefix="export-fiches-rncp-v4-1"):
 
 
 def ensure_detail_columns(conn):
-    cols = [
+    text_cols = [
         "activites_visees", "capacites_attestees", "secteurs_activite",
         "type_emploi_accessibles", "reglementations_activites",
         "objectifs_contexte", "prerequis_entree_formation",
+        # Détails supplémentaires (parité avec la fiche France Compétences)
+        "composition_jury", "date_limite_delivrance", "duree_enregistrement",
+        "lien_url_description",
+    ]
+    json_cols = [
+        "voies_acces",       # {fi, ca, fc, cq, cl, vae} → bool
+        "statistiques",      # [{annee, certifies, certifies_vae, insertion_6mois, insertion_2ans}]
+        "codes_rome",        # [{code, libelle}]
+        "correspondances",   # [numero_fiche, ...] (fiches équivalentes)
+        "publications_jo",   # [{titre, date}]
     ]
     cur = conn.cursor()
-    for c in cols:
+    for c in text_cols:
         cur.execute(f"ALTER TABLE fiches ADD COLUMN IF NOT EXISTS {c} TEXT")
+    for c in json_cols:
+        cur.execute(f"ALTER TABLE fiches ADD COLUMN IF NOT EXISTS {c} JSONB")
     conn.commit()
     cur.close()
 
@@ -116,7 +128,8 @@ def create_new_tables(conn):
     cur.execute("""
         CREATE TABLE bloc_competences_new (
             id SERIAL PRIMARY KEY, numero_fiche TEXT,
-            bloc_competences_code TEXT, bloc_competences_libelle TEXT)
+            bloc_competences_code TEXT, bloc_competences_libelle TEXT,
+            liste_competences TEXT, modalites_evaluation TEXT)
     """)
     conn.commit()
     cur.close()
@@ -130,12 +143,116 @@ FICHE_COLS = (
     "type_enregistrement, validation_partielle, actif, "
     "activites_visees, capacites_attestees, secteurs_activite, "
     "type_emploi_accessibles, reglementations_activites, objectifs_contexte, "
-    "prerequis_entree_formation"
+    "prerequis_entree_formation, "
+    "voies_acces, composition_jury, statistiques, codes_rome, "
+    "correspondances, publications_jo, date_limite_delivrance, "
+    "duree_enregistrement, lien_url_description"
 )
 FICHE_UPDATE = ", ".join(
     f"{c} = EXCLUDED.{c}" for c in
     [c.strip() for c in FICHE_COLS.split(",")] if c.strip() != "numero_fiche"
 )
+
+
+# Voies d'accès (modalités de préparation) — balises SI_JURY_* de l'export.
+JURY_VOIES = {
+    "SI_JURY_FI": "fi",    # formation initiale (hors apprentissage)
+    "SI_JURY_CA": "ca",    # contrat d'apprentissage
+    "SI_JURY_FC": "fc",    # formation continue
+    "SI_JURY_CQ": "cq",    # contrat de professionnalisation
+    "SI_JURY_CL": "cl",    # candidature libre / expérience
+    "SI_JURY_VAE": "vae",  # validation des acquis de l'expérience
+}
+
+
+def _int(v):
+    return int(v) if v and v.isdigit() else None
+
+
+def parse_voies_acces(el):
+    """Renvoie ({fi,ca,fc,cq,cl,vae: bool}, composition_jury) — une voie est
+    ouverte si SI_JURY_XX/ACTIF vaut « Oui »."""
+    voies, composition = {}, None
+    for tag, key in JURY_VOIES.items():
+        node = el.find(tag)
+        voies[key] = bool(node is not None and txt(node, "ACTIF") == "Oui")
+        if composition is None and node is not None:
+            composition = txt(node, "COMPOSITION")
+    return (voies if any(voies.values()) else None), composition
+
+
+def parse_statistiques(el):
+    node = el.find("STATISTIQUES_PROMOTIONS")
+    if node is None:
+        return None
+    out = []
+    for p in node.findall("STATISTIQUES_PROMOTION"):
+        annee = txt(p, "ANNEE")
+        if not annee:
+            continue
+        out.append({
+            "annee": annee,
+            "certifies": _int(txt(p, "NOMBRE_CERTIFIES")),
+            "certifies_vae": _int(txt(p, "NOMBRE_CERTIFIES_VAE")),
+            "insertion_6mois": _int(txt(p, "TAUX_INSERTION_GLOBAL_6MOIS")),
+            "insertion_2ans": _int(txt(p, "TAUX_INSERTION_METIER_2ANS")),
+        })
+    out.sort(key=lambda s: s["annee"], reverse=True)
+    return out or None
+
+
+def parse_codes_rome(el):
+    node = el.find("CODES_ROME")
+    if node is None:
+        return None
+    out = [{"code": txt(r, "CODE"), "libelle": txt(r, "LIBELLE")}
+           for r in node.findall("ROME") if txt(r, "CODE")]
+    return out or None
+
+
+def parse_correspondances(el):
+    node = el.find("CORRESPONDANCES")
+    if node is None:
+        return None
+    seen = []
+    for c in node.findall("CORRESPONDANCE"):
+        dest = c.find("DESTINATION")
+        nf = txt(dest, "NUMERO_FICHE") if dest is not None else None
+        if nf and nf not in seen:
+            seen.append(nf)
+    return seen or None
+
+
+def parse_publications(el):
+    out = []
+    for tag in ("PUBLICATION_DECRET_GENERAL", "PUBLICATION_DECRET_CREATION", "PUBLICATION_DECRET_AUTRE"):
+        node = el.find(tag)
+        if node is None:
+            continue
+        for pj in node.findall("PUBLICATION_JO"):
+            titre = txt(pj, "TITRE")
+            if titre:
+                out.append({"titre": titre, "date": fr_date(txt(pj, "DATE_PUBLICATION_JO"))})
+    return out or None
+
+
+def _extra_cols(el):
+    """Colonnes supplémentaires, dans l'ordre de FICHE_COLS. Les valeurs
+    structurées sont enveloppées dans Json() pour l'insertion en JSONB."""
+    voies, composition = parse_voies_acces(el)
+    stats, rome = parse_statistiques(el), parse_codes_rome(el)
+    corr, pubs = parse_correspondances(el), parse_publications(el)
+    return (
+        Json(voies) if voies else None,
+        composition,
+        Json(stats) if stats else None,
+        Json(rome) if rome else None,
+        Json(corr) if corr else None,
+        Json(pubs) if pubs else None,
+        fr_date(txt(el, "DATE_LIMITE_DELIVRANCE")),
+        txt(el, "DUREE_ENREGISTREMENT"),
+        txt(el, "LIEN_URL_DESCRIPTION"),
+    )
 
 
 def parse_fiche(el):
@@ -159,6 +276,7 @@ def parse_fiche(el):
         txt(el, "SECTEURS_ACTIVITE"), txt(el, "TYPE_EMPLOI_ACCESSIBLES"),
         txt(el, "REGLEMENTATIONS_ACTIVITES"), txt(el, "OBJECTIFS_CONTEXTE"),
         txt(el, "PREREQUIS_ENTREE_FORMATION"),
+        *_extra_cols(el),
     )
     certifs_by_key = {}
     certs_el = el.find("CERTIFICATEURS")
@@ -180,7 +298,8 @@ def parse_fiche(el):
     blocs_el = el.find("BLOCS_COMPETENCES")
     if blocs_el is not None:
         for b in blocs_el.findall("BLOC_COMPETENCES"):
-            blocs.append((numero, txt(b, "CODE"), txt(b, "LIBELLE")))
+            blocs.append((numero, txt(b, "CODE"), txt(b, "LIBELLE"),
+                          txt(b, "LISTE_COMPETENCES"), txt(b, "MODALITES_EVALUATION")))
     return fiche, certifs, parts, blocs
 
 
@@ -203,7 +322,7 @@ def flush(conn, fiches, certifs, parts, blocs, retries=5):
                     parts, page_size=500)
             if blocs:
                 execute_values(cur,
-                    "INSERT INTO bloc_competences_new (numero_fiche, bloc_competences_code, bloc_competences_libelle) VALUES %s",
+                    "INSERT INTO bloc_competences_new (numero_fiche, bloc_competences_code, bloc_competences_libelle, liste_competences, modalites_evaluation) VALUES %s",
                     blocs, page_size=500)
             conn.commit()
             cur.close()
